@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>pookieflix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --nflx-red:#e50914;
+    --nflx-black:#141414;
+    --nflx-black2:#181818;
+    --nflx-black3:#0b0b0b;
+    --nflx-gray:#808080;
+    --nflx-lightgray:#b3b3b3;
+    --nflx-white:#f5f5f1;
+    --vh100: 100dvh;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{
+    width:100%;height:100%;background:var(--nflx-black3);
+    font-family:'Oswald',Arial,Helvetica,sans-serif;
+    color:var(--nflx-white);overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{position:relative;width:100vw;height:var(--vh100);}
+  .screen{
+    position:absolute;inset:0;
+    opacity:0;pointer-events:none;
+    transition:opacity .6s ease;
+  }
+  .screen.active{opacity:1;pointer-events:auto;}
+  ::-webkit-scrollbar{width:0;height:0;}
+  button, .icon, .thumb, .profile-card, .replay-btn, .modal-close, .nav a, .heart-btn{
+    -webkit-tap-highlight-color:transparent;
+  }
+  :focus-visible{outline:2px solid #fff;outline-offset:3px;}
+
+  /* ---------- shared ---------- */
+  .logo-word{
+    font-family:'Bebas Neue',Arial,sans-serif;
+    letter-spacing:1px;
+    color:var(--nflx-red);
+    text-shadow:0 0 30px rgba(229,9,20,.35);
+  }
+
+  /* ---------- media-frame: shows full image/video, never crops,
+     fills empty space with a soft blurred echo of itself ---------- */
+  .media-frame{position:relative;width:100%;height:100%;overflow:hidden;background:#050505;}
+  .media-frame .mf-bg{
+    position:absolute;inset:-12%;
+    background-size:cover;background-position:center;
+    filter:blur(22px) saturate(1.35) brightness(.55);
+    transform:scale(1.15);
+    transition:background-image .3s ease;
+  }
+  .media-frame .mf-fg-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
+  .media-frame .mf-fg{
+    max-width:100%;max-height:100%;width:auto;height:auto;
+    object-fit:contain;display:block;
+    box-shadow:0 10px 34px rgba(0,0,0,.55);
+    image-rendering:auto;
+  }
+  .media-frame.mf-cover .mf-bg{display:none;}
+  .media-frame.mf-cover .mf-fg-wrap{inset:0;}
+  .media-frame.mf-cover .mf-fg{width:100%;height:100%;max-width:none;max-height:none;object-fit:cover;box-shadow:none;}
+  .mf-fallback{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,#3a3a3a,#1a1a1a);
+    font-size:12px;color:var(--nflx-gray);text-align:center;padding:8px;z-index:2;
+  }
+  .mf-spinner{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;z-index:3;pointer-events:none;
+  }
+  .mf-spinner::after{
+    content:"";width:34px;height:34px;border-radius:50%;
+    border:3px solid rgba(255,255,255,.25);border-top-color:#fff;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ========== 0. NETFLIX INTRO ========== */
+  #intro{
+    background:#000;
+    display:flex;align-items:center;justify-content:center;
+    overflow:hidden;
+  }
+  .intro-logo{
+    font-family:'Bebas Neue',Arial,sans-serif;
+    font-size:clamp(48px,12vw,140px);
+    letter-spacing:4px;
+    color:var(--nflx-red);
+    opacity:0;
+    transform:scale(.4);
+    filter:blur(6px);
+    animation:introPop 2.6s cubic-bezier(.2,.8,.2,1) forwards;
+  }
+  @keyframes introPop{
+    0%{opacity:0;transform:scale(.3);filter:blur(10px);}
+    35%{opacity:1;transform:scale(1.15);filter:blur(0);}
+    55%{transform:scale(1);}
+    85%{opacity:1;transform:scale(1);text-shadow:0 0 80px rgba(229,9,20,.9);}
+    100%{opacity:0;transform:scale(1.05);text-shadow:0 0 0 rgba(229,9,20,0);}
+  }
+  .intro-flash{
+    position:absolute;inset:0;background:#fff;opacity:0;
+    animation:introFlash 2.6s ease forwards;
+    pointer-events:none;
+  }
+  @keyframes introFlash{
+    0%,30%{opacity:0;}
+    38%{opacity:.55;}
+    46%{opacity:0;}
+    100%{opacity:0;}
+  }
+  .skip-intro{
+    position:absolute;bottom:24px;right:24px;z-index:5;
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);
+    color:#fff;font-family:'Oswald';font-size:12px;letter-spacing:.5px;
+    padding:8px 16px;border-radius:3px;cursor:pointer;
+  }
+
+  /* ========== 1. SPLASH ========== */
+  #splash{
+    background:#000;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;cursor:pointer;
+  }
+  .n-badge{
+    width:110px;height:110px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #ff2b34, #b0060c 70%);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 60px rgba(229,9,20,.55);
+    animation:pulse 2.1s ease-in-out infinite;
+    position:relative;
+  }
+  .n-badge svg{width:44px;height:44px;fill:#fff;margin-left:4px;}
+  @keyframes pulse{
+    0%,100%{transform:scale(1);box-shadow:0 0 40px rgba(229,9,20,.45);}
+    50%{transform:scale(1.06);box-shadow:0 0 75px rgba(229,9,20,.7);}
+  }
+  .splash-hint{margin-top:26px;font-size:12px;letter-spacing:1px;color:var(--nflx-gray);animation:fadeInOut 1.8s ease-in-out infinite;}
+  @keyframes fadeInOut{0%,100%{opacity:.4;}50%{opacity:1;}}
+  .fake-scrub{
+    position:absolute;bottom:26px;left:24px;right:24px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .fake-scrub .track{flex:1;height:3px;background:rgba(255,255,255,.25);border-radius:2px;position:relative;overflow:hidden;}
+  .fake-scrub .fill{position:absolute;left:0;top:0;bottom:0;width:8%;background:#fff;}
+  .fake-scrub .time{font-size:11px;color:var(--nflx-lightgray);white-space:nowrap;}
+
+  /* ========== 2. PROFILE SELECT ========== */
+  #profiles{background:var(--nflx-black);display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  #profiles .nx-logo{position:absolute;top:34px;left:40px;font-size:30px;}
+  .who-title{font-size:clamp(26px,3.6vw,46px);font-weight:400;letter-spacing:1px;margin-bottom:44px;color:#e5e5e5;}
+  .profile-row{display:flex;gap:44px;align-items:flex-start;}
+  .profile-card{display:flex;flex-direction:column;align-items:center;gap:16px;cursor:pointer;opacity:.75;transition:opacity .25s;position:relative;}
+  .profile-card:hover{opacity:1;}
+  .avatar{
+    width:150px;height:150px;border-radius:10px;
+    background:linear-gradient(135deg,#e50914,#7a0509);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Bebas Neue',sans-serif;font-size:64px;color:#fff;
+    border:3px solid transparent;
+    overflow:hidden;
+    position:relative;
+  }
+  .profile-card:hover .avatar{border-color:#fff;}
+  .avatar .media-frame{position:absolute;inset:0;}
+  .avatar-letter{position:relative;z-index:0;}
+  .profile-name{font-size:19px;color:var(--nflx-gray);}
+  .profile-card:hover .profile-name{color:#fff;}
+  .goof-sticker{
+    position:absolute;top:-14px;right:-18px;
+    font-size:34px;z-index:4;
+    transform:rotate(12deg);
+    animation:wiggle 2.4s ease-in-out infinite;
+    filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));
+  }
+  @keyframes wiggle{
+    0%,100%{transform:rotate(12deg) scale(1);}
+    50%{transform:rotate(-6deg) scale(1.1);}
+  }
+  .goof-photo{
+    position:absolute;bottom:-10px;left:-28px;
+    width:56px;height:56px;border-radius:8px;
+    overflow:hidden;border:3px solid #fff;
+    transform:rotate(-10deg);
+    box-shadow:0 4px 14px rgba(0,0,0,.5);
+    background:#2b2b2b;z-index:4;
+  }
+  .goof-photo .media-frame{position:absolute;inset:0;}
+  .add-profile{opacity:.55;}
+  .add-avatar{
+    width:150px;height:150px;border-radius:10px;
+    background:#2a2a2a;display:flex;align-items:center;justify-content:center;
+    border:3px solid transparent;
+  }
+  .add-avatar svg{width:56px;height:56px;fill:#6f6f6f;}
+  .add-profile:hover .add-avatar{border-color:#fff;}
+  .add-profile:hover .add-avatar svg{fill:#fff;}
+
+  /* ========== 3. BROWSE ========== */
+  #browse{background:var(--nflx-black);overflow-y:auto;}
+  .nav{
+    position:fixed;top:0;left:0;right:0;z-index:20;
+    display:flex;align-items:center;gap:34px;
+    padding:18px 44px;
+    padding-top:calc(18px + env(safe-area-inset-top));
+    background:linear-gradient(180deg, rgba(0,0,0,.85) 10%, transparent);
+    transition:background .3s ease;
+  }
+  .nav.solid{background:rgba(20,20,20,.97);}
+  .nav .nx-logo{font-size:26px;margin-right:6px;flex:0 0 auto;}
+  .nav a{font-size:14px;color:#e5e5e5;text-decoration:none;opacity:.85;cursor:pointer;white-space:nowrap;}
+  .nav a.current{font-weight:600;opacity:1;}
+  .nav .spacer{flex:1;}
+  .nav .icon{width:20px;height:20px;opacity:.9;cursor:pointer;flex:0 0 auto;}
+  .nav .mini-avatar{width:30px;height:30px;border-radius:6px;overflow:hidden;background:linear-gradient(135deg,#e50914,#7a0509);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue';flex:0 0 auto;}
+  .nav .mini-avatar .media-frame{position:absolute;inset:0;}
+  .search-wrap{
+    display:flex;align-items:center;gap:8px;
+    background:rgba(0,0,0,.75);border:1px solid rgba(255,255,255,.5);
+    border-radius:3px;padding:6px 10px;max-width:0;overflow:hidden;
+    opacity:0;transition:max-width .3s ease, opacity .2s ease, padding .3s ease;
+  }
+  .search-wrap.open{max-width:220px;opacity:1;}
+  .search-wrap input{
+    background:transparent;border:none;outline:none;color:#fff;font-family:'Oswald';font-size:13px;width:100%;
+  }
+  .search-wrap svg{width:16px;height:16px;fill:#fff;flex:0 0 auto;}
+
+  .hero{
+    position:relative;height:78vh;min-height:460px;
+    display:flex;align-items:flex-end;
+    padding:0 44px 60px;
+    overflow:hidden;
+  }
+  .hero-bg{
+    position:absolute;
+    inset:0;
+    z-index:0;
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+}
+  .hero::after{
+    content:"";position:absolute;inset:0;
+    background:linear-gradient(0deg, var(--nflx-black) 2%, rgba(20,20,20,.15) 55%, rgba(20,20,20,.55) 100%),
+               linear-gradient(90deg, rgba(0,0,0,.75) 0%, rgba(0,0,0,.1) 55%);
+    z-index:0;
+  }
+  .hero-content{position:relative;z-index:1;max-width:640px;}
+  .hero-title{
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(40px,7vw,88px);
+    line-height:.95;letter-spacing:1px;
+    margin-bottom:18px;
+    text-shadow:0 4px 18px rgba(0,0,0,.6);
+  }
+  .hero-tags{display:flex;gap:10px;align-items:center;margin-bottom:14px;font-size:13px;color:#d2d2d2;flex-wrap:wrap;}
+  .hero-tags .tag-match{color:#46d369;font-weight:600;}
+  .hero-tags .pill{border:1px solid rgba(255,255,255,.5);padding:1px 6px;border-radius:2px;font-size:11px;}
+  .hero-desc{font-size:16px;line-height:1.55;color:#f0f0f0;max-width:560px;margin-bottom:26px;text-shadow:0 2px 8px rgba(0,0,0,.7);}
+  .hero-btns{display:flex;gap:14px;flex-wrap:wrap;align-items:center;}
+  .btn{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 26px;border-radius:4px;border:none;
+    font-family:'Oswald';font-size:16px;font-weight:600;
+    cursor:pointer;
+  }
+  .btn-play{background:#fff;color:#000;}
+  .btn-play:hover{background:rgba(255,255,255,.8);}
+  .btn-info{background:rgba(109,109,110,.6);color:#fff;}
+  .btn-info:hover{background:rgba(109,109,110,.4);}
+  .btn svg{width:20px;height:20px;}
+  .circle-btn{
+    width:38px;height:38px;border-radius:50%;border:2px solid rgba(255,255,255,.6);
+    background:rgba(42,42,42,.6);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;transition:border-color .2s;
+  }
+  .circle-btn:hover{border-color:#fff;}
+  .circle-btn svg{width:18px;height:18px;fill:#fff;}
+  .circle-btn.active{background:#fff;}
+  .circle-btn.active svg{fill:#000;}
+
+  .row-section{padding:0 44px;margin-top:-40px;position:relative;z-index:2;}
+  .row-title{font-size:19px;font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:10px;}
+  .row-title .row-empty-hint{font-size:12px;color:var(--nflx-gray);font-weight:400;}
+  .thumb-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:20px;scroll-snap-type:x proximity;}
+  @media(min-width:1300px){
+    .thumb-row{ flex-wrap: nowrap; }
+    .thumb-row .thumb{ flex:1 1 0; max-width:260px; }
+  }
+  .thumb{
+    flex:0 0 auto;width:clamp(150px,22vw,230px);aspect-ratio:16/9;border-radius:4px;overflow:hidden;
+    position:relative;cursor:pointer;background:#2b2b2b;
+    transition:transform .25s ease,z-index 0s;
+    scroll-snap-align:start;
+}
+@media(min-width:1300px){
+  .thumb{ flex:1 1 0; width:auto; }
+}
+  .thumb:hover, .thumb.previewing{transform:scale(1.08);z-index:3;box-shadow:0 12px 30px rgba(0,0,0,.6);}
+  .thumb .bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.3);z-index:5;}
+  .thumb .bar span{display:block;height:100%;background:var(--nflx-red);width:0%;}
+  .thumb .playhint{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,0);opacity:0;transition:opacity .2s;z-index:4;
+  }
+  .thumb:hover .playhint, .thumb.previewing .playhint{opacity:1;background:rgba(0,0,0,.15);}
+  .thumb .playhint svg{width:34px;height:34px;fill:#fff;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));}
+  .thumb .vid-badge{
+    position:absolute;top:6px;left:6px;z-index:5;
+    background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.4);
+    color:#fff;font-size:10px;letter-spacing:.5px;padding:2px 6px;border-radius:2px;
+  }
+  .thumb .heart-btn{
+    position:absolute;top:6px;right:6px;z-index:6;
+    width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.55);
+    display:flex;align-items:center;justify-content:center;
+    opacity:0;transition:opacity .2s;
+  }
+  .thumb:hover .heart-btn, .thumb.previewing .heart-btn{opacity:1;}
+  .thumb .heart-btn svg{width:14px;height:14px;fill:#fff;}
+  .thumb .heart-btn.liked svg{fill:var(--nflx-red);}
+  .thumb .thumb-info{
+    position:absolute;left:0;right:0;bottom:0;z-index:5;
+    padding:22px 10px 8px;
+    background:linear-gradient(0deg, rgba(0,0,0,.92) 0%, rgba(0,0,0,.55) 55%, transparent 100%);
+    transition:padding-top .25s ease;
+  }
+  .thumb-info .t-title{
+    font-size:12.5px;font-weight:600;color:#fff;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    text-shadow:0 1px 4px rgba(0,0,0,.8);
+  }
+  .thumb-info .t-caption{
+    font-size:10.5px;color:var(--nflx-lightgray);font-style:italic;
+    line-height:1.35;margin-top:3px;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+    max-height:0;opacity:0;transition:max-height .25s ease, opacity .2s ease;
+  }
+  .thumb:hover .thumb-info, .thumb.previewing .thumb-info{padding-top:34px;}
+  .thumb:hover .thumb-info .t-caption, .thumb.previewing .thumb-info .t-caption{max-height:34px;opacity:1;}
+
+  /* ========== 4. PLAYER ========== */
+  #player{background:#000;}
+  .player-backdrop{
+    position:absolute;inset:-12%;background-size:cover;background-position:center;
+    filter:blur(30px) saturate(1.3) brightness(.5);transform:scale(1.15);
+  }
+  .player-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:transparent;z-index:1;}
+  .player-media.contain{object-fit:contain;}
+  .player-top{
+    position:absolute;top:0;left:0;right:0;z-index:5;
+    display:flex;align-items:center;gap:18px;
+    padding:22px 30px;
+    padding-top:calc(22px + env(safe-area-inset-top));
+    background:linear-gradient(180deg, rgba(0,0,0,.75), transparent);
+  }
+  .back-btn{width:26px;height:26px;cursor:pointer;fill:#fff;flex:0 0 auto;}
+  .player-title{font-family:'Oswald';font-size:17px;font-weight:500;}
+  .player-top .spacer{flex:1;}
+  .fs-btn{width:22px;height:22px;fill:#fff;cursor:pointer;}
+  .player-caption-msg{
+    position:absolute;left:0;right:0;bottom:130px;z-index:5;
+    text-align:center;padding:0 12%;
+    font-size:clamp(14px,2.2vw,22px);
+    font-style:italic;font-weight:300;
+    color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.8);
+    line-height:1.6;
+    max-width:900px;margin:0 auto;
+  }
+  .player-controls{
+    position:absolute;left:0;right:0;bottom:0;z-index:5;
+    padding:0 30px 22px;
+    padding-bottom:calc(22px + env(safe-area-inset-bottom));
+    background:linear-gradient(0deg, rgba(0,0,0,.85), transparent);
+  }
+  .player-scrub{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+  .player-scrub .track{flex:1;height:4px;background:rgba(255,255,255,.28);border-radius:2px;cursor:pointer;position:relative;}
+  .player-scrub .track:hover{height:6px;}
+  .player-scrub .fill{position:absolute;left:0;top:0;bottom:0;background:var(--nflx-red);border-radius:2px;width:0%;pointer-events:none;}
+  .player-scrub .knob{position:absolute;top:50%;width:12px;height:12px;background:#fff;border-radius:50%;transform:translate(-50%,-50%);left:0%;pointer-events:none;}
+  .player-time{font-size:12px;color:var(--nflx-lightgray);min-width:80px;text-align:right;}
+  .player-btns{display:flex;align-items:center;gap:22px;flex-wrap:wrap;}
+  .player-btns svg{width:26px;height:26px;fill:#fff;cursor:pointer;}
+  .player-btns .grow{flex:1;}
+  .player-btns .lbl{font-size:11px;color:var(--nflx-lightgray);}
+  .end-card{
+    position:absolute;inset:0;background:rgba(0,0,0,.92);
+    display:none;align-items:center;justify-content:center;flex-direction:column;gap:22px;text-align:center;
+    padding:20px;z-index:8;
+  }
+  .end-card.show{display:flex;}
+  .end-card h2{font-family:'Bebas Neue';font-size:44px;color:var(--nflx-red);letter-spacing:1px;}
+  .end-card p{max-width:560px;line-height:1.6;color:#eee;font-size:16px;}
+  .end-card-btns{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;}
+  .replay-btn{
+    padding:12px 30px;border-radius:4px;border:2px solid #fff;background:transparent;color:#fff;
+    font-family:'Oswald';font-size:15px;cursor:pointer;
+  }
+  .replay-btn:hover{background:#fff;color:#000;}
+  .replay-btn.solid{background:var(--nflx-red);border-color:var(--nflx-red);}
+  .replay-btn.solid:hover{background:#f6121d;color:#fff;}
+  #confettiCanvas{position:absolute;inset:0;z-index:7;pointer-events:none;}
+
+  /* ---------- Info modal (More Info) ---------- */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:50;
+    display:none;align-items:center;justify-content:center;padding:20px;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal-card{
+    width:min(640px,100%);max-height:85vh;overflow-y:auto;
+    background:#181818;border-radius:8px;position:relative;
+    box-shadow:0 20px 60px rgba(0,0,0,.6);
+  }
+  .modal-hero{height:220px;position:relative;background:radial-gradient(120% 100% at 15% 20%, #2a0d0f 0%, var(--nflx-black3) 55%), linear-gradient(160deg, #1a1a1a, #0b0b0b);}
+  .modal-close{
+    position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;
+    background:rgba(20,20,20,.8);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;
+  }
+  .modal-close svg{width:16px;height:16px;fill:#fff;}
+  .modal-body{padding:24px 30px 32px;}
+  .modal-title{font-family:'Bebas Neue';font-size:30px;color:#fff;letter-spacing:.5px;margin-bottom:8px;}
+  .modal-tags{font-size:13px;color:#46d369;margin-bottom:14px;}
+  .modal-desc{font-size:15px;line-height:1.6;color:#e5e5e5;margin-bottom:18px;}
+  .modal-meta{font-size:13px;color:var(--nflx-gray);line-height:1.8;}
+  .modal-meta b{color:#e5e5e5;font-weight:500;}
+
+  /* ---------- toast ---------- */
+  .toast{
+    position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:#2a2a2a;border:1px solid rgba(255,255,255,.15);color:#fff;
+    padding:10px 20px;border-radius:6px;font-size:13px;z-index:60;
+    opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  @media (hover:none){
+    .thumb .thumb-info{padding-top:34px;}
+    .thumb-info .t-caption{max-height:34px;opacity:1;}
+    .thumb .heart-btn{opacity:1;}
+  }
+  @media(max-width:640px){
+    .nav{gap:14px;padding:14px 18px;padding-top:calc(14px + env(safe-area-inset-top));}
+    .nav a{display:none;}
+    .nav a.current{display:block;}
+    .hero{padding:0 18px 40px;height:70vh;}
+    .row-section{padding:0 18px;}
+    .player-caption-msg{bottom:150px;padding:0 6%;}
+    .goof-photo{width:44px;height:44px;left:-20px;}
+    .goof-sticker{font-size:26px;top:-10px;right:-10px;}
+    .avatar, .add-avatar{width:110px;height:110px;}
+    .who-title{margin-bottom:30px;}
+    .profile-row{gap:26px;}
+    .modal-hero{height:160px;}
+  }
+</style>
+</head>
+<body>
+
+<!--
+  ============================================================
+  QUICK-EDIT PLACEHOLDERS
+  Everything you'd want to personalize lives in the CONFIG
+  object near the bottom of the <script> block. Search for
+  "EDIT ME" to jump straight there.
+  Image/video/audio files just need to sit in the same folder
+  as this index.html (or point CONFIG to a URL).
+
+  WHAT CHANGED IN THIS VERSION
+  - Fixed a real bug: the trailer video was only picking up its
+    source after you forced a reload from devtools. The <source>
+    src was being swapped in JS but the <video> was never told to
+    re-load(), so it silently kept the broken placeholder. Now it
+    calls .load() right after the source changes, every time.
+  - Photos and posters are no longer cropped: the whole image is
+    always shown (object-fit: contain) with a soft blurred glow
+    of itself filling the frame around it, like Apple TV/Music do.
+  - Continue Watching tiles can now be photos OR videos. Video
+    tiles show a live muted preview on hover (tap on phones), a
+    small "PREVIEW" badge, and open that specific clip in the
+    player when tapped.
+  - Real working buttons: search filters the row, More Info opens
+    a proper detail modal, skip ±10s, mute icon reflects state,
+    fullscreen, and a heart "My List" toggle on every tile (synced
+    with the My List nav tab) — all persisted so it's still there
+    next time she opens it.
+  - Fully responsive with dynamic viewport units + safe-area
+    insets for notches, and a little confetti flourish on the
+    end card.
+  ============================================================
+-->
+
+<div id="app">
+
+  <!-- 0. NETFLIX INTRO -->
+  <section id="intro" class="screen active">
+    <div class="intro-flash"></div>
+    <div class="intro-logo logo-word">NETFLIX</div>
+    <button class="skip-intro" id="skipIntro">Skip Intro ▶</button>
+  </section>
+
+  <!-- 1. SPLASH -->
+  <section id="splash" class="screen">
+    <div class="n-badge">
+      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    </div>
+    <div class="splash-hint">tap to continue</div>
+    <div class="fake-scrub">
+      <div class="track"><div class="fill"></div></div>
+      <div class="time">0:02 / 0:28</div>
+    </div>
+  </section>
+
+  <!-- 2. PROFILE SELECT -->
+  <section id="profiles" class="screen">
+    <div class="nx-logo logo-word">NETFLIX</div>
+    <h1 class="who-title">Who's Watching?</h1>
+    <div class="profile-row">
+      <div class="profile-card" id="mainProfile">
+        <div class="avatar" id="mainAvatar">
+          <span class="avatar-letter">V</span>
+          <div class="media-frame" id="mainAvatarFrame" style="display:none;"></div>
+        </div>
+        <div class="goof-sticker" id="goofSticker">🥹</div>
+        <div class="goof-photo" id="goofPhoto">
+          <div class="media-frame" id="goofPhotoFrame"></div>
+        </div>
+        <div class="profile-name" id="mainProfileName">Pookie (Rasgulla)</div>
+      </div>
+      <div class="profile-card add-profile" id="addProfile" tabindex="0">
+        <div class="add-avatar">
+          <svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5zm0 12c4.42 0 8 2.24 8 5v1H4v-1c0-2.76 3.58-5 8-5z" opacity=".0"/><path d="M19 13h-4v4h-2v-4H9v-2h4V7h2v4h4z"/></svg>
+        </div>
+        <div class="profile-name">Add Profile</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. BROWSE -->
+  <section id="browse" class="screen">
+    <div class="nav" id="mainNav">
+      <div class="nx-logo logo-word">NETFLIX</div>
+      <a class="current" data-tab="shows" href="#">TV Shows</a>
+      <a data-tab="movies" href="#">Movies</a>
+      <a data-tab="recent" href="#">Recently Added</a>
+      <a data-tab="mylist" href="#">My List</a>
+      <div class="spacer"></div>
+      <div class="search-wrap" id="searchWrap">
+        <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14"/></svg>
+        <input type="text" id="searchInput" placeholder="Titles, photos, moments...">
+      </div>
+      <svg class="icon" id="searchIcon" viewBox="0 0 24 24" fill="#fff"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14"/></svg>
+    </div>
+
+    <div class="hero" id="heroBanner">
+      <div class="hero-bg" id="heroBg"></div>
+      <div class="hero-content">
+        <div class="hero-tags">
+          <span class="tag-match">98% Made For You</span>
+          <span class="pill">HD</span>
+          <span class="pill">2026</span>
+          <span>Romance · Real Life</span>
+        </div>
+        <div class="hero-title" id="heroTitle">Pookie Day</div>
+        <p class="hero-desc" id="heroDesc">
+          Somewhere along the way, two people met without meaning to.
+          They went on to become each other's safe place.
+          Through good days and loud laughter, you showed up. Again and again.
+        </p>
+        <div class="hero-btns">
+          <button class="btn btn-play" id="playHeroBtn">
+            <svg viewBox="0 0 24 24" fill="#000"><path d="M8 5v14l11-7z"/></svg>
+            Play
+          </button>
+          <button class="btn btn-info" id="moreInfoBtn">
+            <svg viewBox="0 0 24 24" fill="#fff"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+            More Info
+          </button>
+          <div class="circle-btn" id="heroListBtn" title="Add to My List">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-4v4h-2v-4H9v-2h4V7h2v4h4z"/></svg>
+          </div>
+          <div class="circle-btn" id="heroLikeBtn" title="Rate this">
+            <svg viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row-section">
+      <div class="row-title" id="rowTitle">Continue Watching for pookie <span class="row-empty-hint" id="rowEmptyHint"></span></div>
+      <div class="thumb-row" id="continueRow"></div>
+    </div>
+  </section>
+
+  <!-- 4. PLAYER -->
+  <section id="player" class="screen">
+    <div class="player-backdrop" id="playerBackdrop"></div>
+    <video id="playerVideo" class="player-media" playsinline preload="auto"></video>
+    <div class="mf-spinner" id="playerSpinner"></div>
+
+    <div class="player-top">
+      <svg class="back-btn" id="backBtn" viewBox="0 0 24 24"><path d="M12 4l1.41 1.41L7.83 11H20v2H7.83l5.58 5.59L12 20l-8-8z"/></svg>
+      <div class="player-title" id="playerTitle">Pookies Day</div>
+      <div class="spacer"></div>
+      <svg class="fs-btn" id="fsBtn" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+    </div>
+
+    <p class="player-caption-msg" id="playerCaption">
+      Happy birthday, pookie. You mean more to me than any caption could say. I made this so you'd have proof — 28 seconds is nowhere near enough, but here's to many more years of us. 🎂
+    </p>
+
+    <div class="player-controls">
+      <div class="player-scrub" id="scrubTrack">
+        <div class="track">
+          <div class="fill" id="scrubFill"></div>
+          <div class="knob" id="scrubKnob"></div>
+        </div>
+        <div class="player-time" id="playerTime">0:00 / 0:28</div>
+      </div>
+      <div class="player-btns">
+        <svg id="togglePlay" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        <svg id="rewindBtn" viewBox="0 0 24 24"><path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+        <svg id="forwardBtn" viewBox="0 0 24 24"><path d="M12.01 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z" transform="scale(-1,1) translate(-24,0)"/></svg>
+        <svg id="muteBtn" viewBox="0 0 24 24"><path d="M3 10v4h4l5 5V5L7 10H3z"/></svg>
+        <span class="lbl" id="skipLbl">±10s</span>
+        <div class="grow"></div>
+        <svg id="playerListBtn" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+      </div>
+    </div>
+
+    <div class="end-card" id="endCard">
+      <canvas id="confettiCanvas"></canvas>
+      <h2 id="endCardTitle">Happy Birthday, pookie 🎉</h2>
+      <p id="endCardMsg">
+        This was just the trailer. Every day with you is the real feature.
+        Love you tons.
+      </p>
+      <div class="end-card-btns">
+        <button class="replay-btn solid" id="replayBtn">Watch Again</button>
+        <button class="replay-btn" id="backToBrowseBtn">Back to Pookieflix</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- More Info modal -->
+<div class="modal-overlay" id="infoModal">
+  <div class="modal-card">
+    <div class="modal-hero" id="modalHero">
+      <div class="modal-close" id="modalClose"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-title">Pookies Bday</div>
+      <div class="modal-tags">98% Made For You &nbsp;·&nbsp; 2026 &nbsp;·&nbsp; HD &nbsp;·&nbsp; Unlimited Rewatches</div>
+      <p class="modal-desc" id="modalDesc">
+      From little moments to unforgettable memories, every day with you has been special. 
+      Today we celebrate the person who makes life happier just by being in it. Happy Birthday!
+    </p>
+        <div><b>Starring:</b> You &amp; Me</div>
+        <div><b>Genre:</b> Romance, Comedy, Real Life</div>
+        <div><b>Runtime:</b> A lifetime, hopefully</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<audio id="bgSong" loop preload="auto"></audio>
+
+<script>
+/* ============================================================
+   EDIT ME — everything personal lives here.
+   Replace file names with your own assets sitting next to this
+   index.html, or paste a URL.
+   ============================================================ */
+const CONFIG = {
+  // ---- Profile ----
+  // Only ONE photo is needed here — it's used for the profile picture on the
+  // "Who's Watching?" screen, the little tilted corner photo, AND the small
+  // icon in the top-right nav once you've picked the profile.
+  // If you ever want the corner photo to be a different picture, just change
+  // goofPhoto to a different filename — otherwise leave it matching profilePhoto.
+  profileName: "Pookie (Rasgulla)",
+  profilePhoto: "pookie.webp",
+  goofSticker: "🥹",
+  goofPhoto: "pookie.webp",
+
+  // ---- Hero / "Our Journey" tile ----
+  heroTitle: "Pookies 20th Birthday",
+  heroDesc: "Somewhere along the way, two people met without meaning to. They went on to become each other's safe place. Through good days and loud laughter, you showed up. Again and again.",
+  heroBackgroundImage: "bg1.jpg",
+
+  // ---- Continue Watching row ----
+  // type: "image" or "video".
+  // For "video" tiles: `src` plays as a silent hover/tap preview in the tile,
+  // and becomes the actual clip that opens in the full player when tapped.
+  // Give each item its own `title`/`caption` so the player updates to match.
+  // Each tile can have its own `title` (shown always, bottom-left, bold) and
+  // `caption` (a short line that appears when you hover/tap the tile) — so
+  // every clip can tell its own little story instead of a bare label.
+  // type:"video" tiles preview silently on hover/tap and open THAT clip
+  // (not the main hero video) in the full player when tapped.
+  continueWatching: [
+    { type: "video", image: "thatday.jpg", video: "thatday.mp4",
+      label: "That Day", progress: 40,
+      title: "That Day", caption: "The best thing you could say it — still my favorite." },
+    { type: "video", image: "us.jpg", video: "us.mp4",
+      label: "Us", progress: 60,
+      title: "Us", caption: "Just us, being us. No caption needed, honestly." },
+    { type: "video", image: "cat.jpg", video: "copycat.mp4",
+      label: "That cat", progress: 25,
+      title: "The cat", caption: "Taking same step as you." },
+    { type: "video", image: "first_proper.jpg", video: "first_proper.mp4",
+      label: "First Proper Meet", progress: 80,
+      title: "First Proper Meet", caption: "The first south delhi tour with the pookie." },
+      
+    { type: "video", image: "best_day.avif", video: "best_dance.mp4",
+      label: "Behind the Scenes", progress: 10,
+      title: "Behind the Scenes", caption: "The bloopers, the giggles, the in-between moments nobody else got to see." },
+
+    
+    //{ type: "video", image: "baddies_day1.jpg", video: "pookie.mp4",
+     // label: "Pookies move", progress: 10,
+      //title: "Baddie", caption: "THE OG THE innocent" }
+  ],
+
+  // ---- The main video that plays from the hero Play button ----
+  videoSrc: "main.mp4",
+  videoPoster: "main.jpg",
+  playerTitle: "Pookie Day",
+  playerCaption: "Happy birthday, pookie ❤️. A little reminder of how special you are. 🎂",
+
+  // ---- Background song ----
+  songSrc: "engisawyou.mp3",
+  // "profile" -> starts on profile pick, "play" -> only on video Play, "both" -> both
+  musicStartMode: "both",
+  musicVolumeWhileBrowsing: 0.35
+};
+/* ============================================================ */
+
+/* ---------- helpers ---------- */
+function setVh(){ document.documentElement.style.setProperty('--vh100', window.innerHeight + 'px'); }
+setVh();
+window.addEventListener('resize', setVh);
+window.addEventListener('orientationchange', setVh);
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._tmr);
+  toast._tmr = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+function ls_get(key, fallback){
+  try{ const v = localStorage.getItem(key); return v===null ? fallback : JSON.parse(v); }
+  catch(e){ return fallback; }
+}
+function ls_set(key, val){
+  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
+}
+
+// Builds a media-frame (image or video) that never crops the source,
+// with a blurred echo of itself filling the empty space.
+function buildMediaFrame({ src, isVideo=false, poster=null, muted=true, loop=true, cover=false, fallbackLabel="" }){
+  const wrap = document.createElement('div');
+  wrap.className = 'media-frame' + (cover ? ' mf-cover' : '');
+
+  const bg = document.createElement('div');
+  bg.className = 'mf-bg';
+  if (poster || (!isVideo && src)) bg.style.backgroundImage = `url('${poster || src}')`;
+  wrap.appendChild(bg);
+
+  const fgWrap = document.createElement('div');
+  fgWrap.className = 'mf-fg-wrap';
+  let fgEl;
+  if (isVideo){
+    fgEl = document.createElement('video');
+    fgEl.className = 'mf-fg';
+    fgEl.muted = muted;
+    fgEl.loop = loop;
+    fgEl.playsInline = true;
+    fgEl.preload = 'metadata';
+    if (poster) fgEl.poster = poster;
+    const source = document.createElement('source');
+    source.src = src;
+    source.type = 'video/mp4';
+    fgEl.appendChild(source);
+  } else {
+    fgEl = document.createElement('img');
+    fgEl.className = 'mf-fg';
+    fgEl.loading = 'lazy';
+    fgEl.decoding = 'async';
+    fgEl.src = src;
+    fgEl.alt = fallbackLabel;
+  }
+  fgWrap.appendChild(fgEl);
+  wrap.appendChild(fgWrap);
+
+  fgEl.addEventListener('error', () => {
+    fgWrap.style.display = 'none';
+    bg.style.display = 'none';
+  });
+  return { wrap, fgEl, bg };
+}
+
+/* ---------- wire simple CONFIG values ---------- */
+document.getElementById('mainProfileName').textContent = CONFIG.profileName;
+document.querySelector('#mainAvatar .avatar-letter').textContent = CONFIG.profileName.trim()[0] || "V";
+
+// profile avatar (falls back to the letter badge already in the DOM if it errors)
+(function(){
+  const { wrap, fgEl } = buildMediaFrame({ src: CONFIG.profilePhoto, cover:true, fallbackLabel:"" });
+  fgEl.addEventListener('error', () => { document.getElementById('mainAvatarFrame').style.display='none'; });
+  fgEl.addEventListener('load', () => { document.getElementById('mainAvatarFrame').style.display='block'; });
+  const holder = document.getElementById('mainAvatarFrame');
+  holder.replaceWith(wrap);
+  wrap.id = 'mainAvatarFrame';
+
+  // nav avatar icon removed — no photo shown in the nav bar anymore
+})();
+
+document.getElementById('goofSticker').textContent = CONFIG.goofSticker;
+(function(){
+  const { wrap } = buildMediaFrame({ src: CONFIG.goofPhoto, cover:true });
+  const holder = document.getElementById('goofPhotoFrame');
+  holder.replaceWith(wrap);
+  wrap.id = 'goofPhotoFrame';
+})();
+
+document.getElementById('heroTitle').textContent = CONFIG.heroTitle;
+document.getElementById('heroDesc').textContent = CONFIG.heroDesc;
+document.getElementById('modalDesc').textContent = CONFIG.heroDesc;
+// Hero banner is now a plain dark gradient (no photo) — see .hero-bg in the CSS above.
+// If you ever want a photo back there, uncomment the next line and set CONFIG.heroBackgroundImage.
+// document.getElementById('heroBg').style.backgroundImage = `url('${CONFIG.heroBackgroundImage}')`;
+// modalHero also stays a plain gradient now — see .modal-hero in the CSS above.
+// document.getElementById('modalHero').style.backgroundImage = `url('${CONFIG.heroBackgroundImage}')`;
+document.getElementById("heroBg").style.backgroundImage =
+`linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.65)), url('${CONFIG.heroBackgroundImage}')`;
+
+/* ---------- My List (persisted) ---------- */
+const MYLIST_KEY = 'pookieflix_mylist';
+let myList = ls_get(MYLIST_KEY, []);
+function isLiked(id){ return myList.includes(id); }
+function toggleLike(id){
+  if (isLiked(id)) myList = myList.filter(x=>x!==id);
+  else myList.push(id);
+  ls_set(MYLIST_KEY, myList);
+  renderContinueRow();
+}
+
+/* ---------- Continue Watching row ---------- */
+const CONTINUE_KEY = 'pookieflix_progress';
+let progressStore = ls_get(CONTINUE_KEY, {});
+let activeTab = 'shows';
+let searchQuery = '';
+
+const continueRow = document.getElementById('continueRow');
+const rowTitle = document.getElementById('rowTitle');
+const rowEmptyHint = document.getElementById('rowEmptyHint');
+
+function renderContinueRow(){
+  continueRow.innerHTML = '';
+  let items = CONFIG.continueWatching.map((item, i) => ({...item, id: 'cw_'+i}));
+
+  if (activeTab === 'mylist') items = items.filter(it => isLiked(it.id));
+  if (searchQuery.trim()){
+    const q = searchQuery.trim().toLowerCase();
+    items = items.filter(it => it.label.toLowerCase().includes(q));
+  }
+
+  rowEmptyHint.textContent = items.length ? '' : (activeTab==='mylist' ? '— nothing added yet, tap the ⚡ icon on a tile' : '— no matches');
+
+  items.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.dataset.id = item.id;
+
+    const progress = progressStore[item.id] != null ? progressStore[item.id] : item.progress;
+
+    const frame = buildMediaFrame({
+      src: item.type === 'video' ? item.image : item.image,
+      isVideo:false, cover:true, fallbackLabel:item.label
+    });
+    div.appendChild(frame.wrap);
+
+    if (item.type === 'video'){
+      const badge = document.createElement('div');
+      badge.className = 'vid-badge';
+      badge.textContent = 'PREVIEW';
+      div.appendChild(badge);
+    }
+
+    const playhint = document.createElement('div');
+    playhint.className = 'playhint';
+    playhint.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+    div.appendChild(playhint);
+
+    const heart = document.createElement('div');
+    heart.className = 'heart-btn' + (isLiked(item.id) ? ' liked' : '');
+    heart.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 21s-6.7-4.3-9.3-8.1C.6 9.6 1.6 5.9 4.9 4.6c2-.8 4.1-.1 5.4 1.5.5.6.9 1.2 1.7 1.2s1.2-.6 1.7-1.2c1.3-1.6 3.4-2.3 5.4-1.5 3.3 1.3 4.3 5 2.2 8.3C18.7 16.7 12 21 12 21z"/></svg>';
+    heart.addEventListener('click', (e) => { e.stopPropagation(); toggleLike(item.id); });
+    div.appendChild(heart);
+
+    const info = document.createElement('div');
+    info.className = 'thumb-info';
+    info.innerHTML = `<div class="t-title">${item.title || item.label}</div>` +
+      (item.caption ? `<div class="t-caption">${item.caption}</div>` : '');
+    div.appendChild(info);
+
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    bar.innerHTML = `<span style="width:${progress}%"></span>`;
+    div.appendChild(bar);
+
+    // video hover / tap preview
+    if (item.type === 'video'){
+      let previewVideo = null;
+      const startPreview = () => {
+        if (previewVideo) return;
+        const vf = buildMediaFrame({ src: item.video, isVideo:true, poster:item.image, cover:true, muted:true, loop:true });
+        div.insertBefore(vf.wrap, div.firstChild);
+        frame.wrap.style.display = 'none';
+        previewVideo = vf.fgEl;
+        previewVideo.play().catch(()=>{});
+        div.classList.add('previewing');
+      };
+      const stopPreview = () => {
+        if (!previewVideo) return;
+        previewVideo.pause();
+        previewVideo.closest('.media-frame').remove();
+        frame.wrap.style.display = '';
+        previewVideo = null;
+        div.classList.remove('previewing');
+      };
+      const isTouch = window.matchMedia('(hover: none)').matches;
+      if (!isTouch){
+        div.addEventListener('mouseenter', startPreview);
+        div.addEventListener('mouseleave', stopPreview);
+      } else {
+        let tapped = false;
+        div.addEventListener('click', (e) => {
+          if (!tapped){ e.preventDefault(); e.stopImmediatePropagation(); tapped = true; startPreview(); toast('Tap again to watch it in full'); return; }
+        }, true);
+      }
+    }
+
+    div.addEventListener('click', () => openPlayer(item));
+    continueRow.appendChild(div);
+  });
+}
+renderContinueRow();
+
+/* ---------- nav tabs / search ---------- */
+document.querySelectorAll('.nav a').forEach(a => {
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('current'));
+    a.classList.add('current');
+    activeTab = a.dataset.tab;
+    if (activeTab === 'mylist') rowTitle.firstChild.textContent = 'My List ';
+    else rowTitle.firstChild.textContent = 'Continue Watching for ' + CONFIG.profileName.split(' ')[0] + ' ';
+    renderContinueRow();
+  });
+});
+const searchWrap = document.getElementById('searchWrap');
+const searchInput = document.getElementById('searchInput');
+document.getElementById('searchIcon').addEventListener('click', () => {
+  searchWrap.classList.toggle('open');
+  if (searchWrap.classList.contains('open')) searchInput.focus();
+  else { searchInput.value=''; searchQuery=''; renderContinueRow(); }
+});
+searchInput.addEventListener('input', (e) => { searchQuery = e.target.value; renderContinueRow(); });
+searchInput.addEventListener('keydown', (e) => { if (e.key === 'Escape'){ searchWrap.classList.remove('open'); searchInput.value=''; searchQuery=''; renderContinueRow(); }});
+
+document.getElementById('mainNav').addEventListener('wheel', () => {}, {passive:true});
+document.getElementById('browse').addEventListener('scroll', (e) => {
+  document.getElementById('mainNav').classList.toggle('solid', e.target.scrollTop > 10);
+});
+
+/* ---------- hero My List / Like ---------- */
+const HERO_ID = 'hero_main';
+const heroListBtn = document.getElementById('heroListBtn');
+const heroLikeBtn = document.getElementById('heroLikeBtn');
+function syncHeroButtons(){
+  heroListBtn.classList.toggle('active', isLiked(HERO_ID));
+  heroLikeBtn.classList.toggle('active', ls_get('pookie_hero_liked', false));
+}
+heroListBtn.addEventListener('click', () => { toggleLike(HERO_ID); syncHeroButtons(); toast(isLiked(HERO_ID) ? 'Added to My List' : 'Removed from My List'); });
+heroLikeBtn.addEventListener('click', () => {
+  const liked = !ls_get('pookie_hero_liked', false);
+  ls_set('pookieflix_hero_liked', liked);
+  syncHeroButtons();
+  toast(liked ? 'Loved it 👍' : 'Rating removed');
+});
+syncHeroButtons();
+
+/* ---------- More Info modal ---------- */
+const infoModal = document.getElementById('infoModal');
+document.getElementById('moreInfoBtn').addEventListener('click', () => infoModal.classList.add('show'));
+document.getElementById('modalClose').addEventListener('click', () => infoModal.classList.remove('show'));
+infoModal.addEventListener('click', (e) => { if (e.target === infoModal) infoModal.classList.remove('show'); });
+
+/* ---------- screens ---------- */
+const screens = {
+  intro: document.getElementById('intro'),
+  splash: document.getElementById('splash'),
+  profiles: document.getElementById('profiles'),
+  browse: document.getElementById('browse'),
+  player: document.getElementById('player')
+};
+function showScreen(name){
+  Object.values(screens).forEach(s => s.classList.remove('active'));
+  screens[name].classList.add('active');
+}
+
+let introTimer = setTimeout(() => showScreen('splash'), 2600);
+document.getElementById('skipIntro').addEventListener('click', () => { clearTimeout(introTimer); showScreen('splash'); });
+document.getElementById('splash').addEventListener('click', () => showScreen('profiles'));
+
+/* ---------- background song ---------- */
+const bgSong = document.getElementById('bgSong');
+bgSong.src = CONFIG.songSrc;
+bgSong.load();
+bgSong.volume = CONFIG.musicVolumeWhileBrowsing;
+bgSong.addEventListener('error', () => console.warn('Background song failed to load:', CONFIG.songSrc));
+
+document.getElementById('mainProfile').addEventListener('click', () => {
+  if (CONFIG.musicStartMode === 'profile' || CONFIG.musicStartMode === 'both'){
+    bgSong.volume = CONFIG.musicVolumeWhileBrowsing;
+    bgSong.currentTime = 0;
+    bgSong.play().catch(()=>{});
+  }
+  showScreen('browse');
+});
+document.getElementById('addProfile').addEventListener('click', () => toast("Nice try — it's just you 💕"));
+
+/* ---------- player ---------- */
+const videoEl = document.getElementById('playerVideo');
+const playerBackdrop = document.getElementById('playerBackdrop');
+const playerSpinner = document.getElementById('playerSpinner');
+const playerCaption = document.getElementById('playerCaption');
+const playerTitleEl = document.getElementById('playerTitle');
+let currentItemId = null;
+
+function loadClip({ src, poster, title, caption }){
+  playerBackdrop.style.backgroundImage = poster ? `url('${poster}')` : 'none';
+  videoEl.poster = poster || '';
+  videoEl.innerHTML = '';
+  const source = document.createElement('source');
+  source.src = src;
+  source.type = 'video/mp4';
+  videoEl.appendChild(source);
+  videoEl.load(); // <-- the actual fix: forces the element to pick up the new source immediately
+  playerTitleEl.textContent = title || CONFIG.playerTitle;
+  playerCaption.textContent = caption || CONFIG.playerCaption;
+  videoEl.classList.remove('contain');
+}
+
+videoEl.addEventListener('loadedmetadata', () => {
+  const vidRatio = videoEl.videoWidth / videoEl.videoHeight;
+  const boxRatio = videoEl.clientWidth / videoEl.clientHeight;
+  // if the clip's shape doesn't roughly match the screen (e.g. a vertical
+  // phone video on a wide screen), show the whole frame instead of cropping it
+  if (Math.abs(vidRatio - boxRatio) / boxRatio > 0.25){
+    videoEl.classList.add('contain');
+  }
+});
+videoEl.addEventListener('waiting', () => { playerSpinner.style.display = 'flex'; });
+videoEl.addEventListener('playing', () => { playerSpinner.style.display = 'none'; });
+videoEl.addEventListener('canplay', () => { playerSpinner.style.display = 'none'; });
+videoEl.addEventListener('error', () => { toast('Could not load that clip — check the file name in CONFIG'); });
+
+function openPlayer(item){
+  showScreen('player');
+  document.getElementById('endCard').classList.remove('show');
+  currentItemId = item ? item.id : null;
+
+  if (item && item.type === 'video'){
+    loadClip({ src: item.video, poster: item.image, title: item.title || item.label, caption: item.caption || '' });
+  } else {
+    loadClip({ src: CONFIG.videoSrc, poster: CONFIG.videoPoster, title: CONFIG.playerTitle, caption: CONFIG.playerCaption });
+  }
+  videoEl.muted = false;
+
+  if (CONFIG.musicStartMode === 'play' || CONFIG.musicStartMode === 'both'){
+    let vol = bgSong.volume;
+    const fade = setInterval(() => {
+      vol -= 0.05;
+      if (vol <= 0){ bgSong.pause(); clearInterval(fade); }
+      else bgSong.volume = vol;
+    }, 40);
+  } else {
+    bgSong.pause();
+  }
+  videoEl.currentTime = 0;
+  videoEl.play().catch(()=>{});
+}
+document.getElementById('playHeroBtn').addEventListener('click', () => openPlayer(null));
+
+document.getElementById('backBtn').addEventListener('click', goBackToBrowse);
+document.getElementById('backToBrowseBtn').addEventListener('click', goBackToBrowse);
+function goBackToBrowse(){
+  videoEl.pause();
+  showScreen('browse');
+  if (CONFIG.musicStartMode !== 'play'){
+    bgSong.volume = CONFIG.musicVolumeWhileBrowsing;
+    bgSong.play().catch(()=>{});
+  }
+}
+
+const togglePlayIcon = document.getElementById('togglePlay');
+function setPlayIcon(playing){
+  togglePlayIcon.innerHTML = playing
+    ? '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'
+    : '<path d="M8 5v14l11-7z"/>';
+}
+togglePlayIcon.addEventListener('click', () => { videoEl.paused ? videoEl.play() : videoEl.pause(); });
+videoEl.addEventListener('play', () => setPlayIcon(true));
+videoEl.addEventListener('pause', () => setPlayIcon(false));
+
+document.getElementById('rewindBtn').addEventListener('click', () => { videoEl.currentTime = Math.max(0, videoEl.currentTime - 10); });
+document.getElementById('forwardBtn').addEventListener('click', () => { videoEl.currentTime = Math.min(videoEl.duration||0, videoEl.currentTime + 10); });
+
+const muteBtn = document.getElementById('muteBtn');
+function setMuteIcon(muted){
+  muteBtn.innerHTML = muted
+    ? '<path d="M16.5 12A4.5 4.5 0 0 0 14 8v1.6l2.4 2.4h.1zM19 12c0 .8-.15 1.55-.4 2.25l1.5 1.5A8.9 8.9 0 0 0 21 12c0-4-2.55-7.4-6-8.7v2.1a7 7 0 0 1 4 6.6zM4.3 3 3 4.3l6.3 6.3H3v4h4l5 5v-6.3l4.7 4.7c-.5.4-1.1.7-1.7 1v2c1-.3 2-.75 2.8-1.35L19.7 21 21 19.7 4.3 3zM12 4 9.9 6.1 12 8.2z"/>'
+    : '<path d="M3 10v4h4l5 5V5L7 10H3zm13.5 2A4.5 4.5 0 0 0 14 8v8a4.47 4.47 0 0 0 2.5-4z"/>';
+}
+muteBtn.addEventListener('click', () => { videoEl.muted = !videoEl.muted; setMuteIcon(videoEl.muted); });
+setMuteIcon(false);
+
+document.getElementById('fsBtn').addEventListener('click', () => {
+  const el = document.getElementById('player');
+  if (!document.fullscreenElement) el.requestFullscreen?.().catch(()=>{});
+  else document.exitFullscreen?.();
+});
+
+const playerListBtn = document.getElementById('playerListBtn');
+playerListBtn.addEventListener('click', () => {
+  const id = currentItemId || HERO_ID;
+  toggleLike(id);
+  toast(isLiked(id) ? 'Added to My List' : 'Removed from My List');
+});
+
+const scrubFill = document.getElementById('scrubFill');
+const scrubKnob = document.getElementById('scrubKnob');
+const playerTime = document.getElementById('playerTime');
+function fmt(t){
+  if (!isFinite(t)) return "0:00";
+  const m = Math.floor(t/60), s = Math.floor(t%60).toString().padStart(2,'0');
+  return `${m}:${s}`;
+}
+videoEl.addEventListener('timeupdate', () => {
+  const pct = videoEl.duration ? (videoEl.currentTime / videoEl.duration) * 100 : 0;
+  scrubFill.style.width = pct + '%';
+  scrubKnob.style.left = pct + '%';
+  playerTime.textContent = `${fmt(videoEl.currentTime)} / ${fmt(videoEl.duration || 0)}`;
+  if (currentItemId && videoEl.duration){
+    progressStore[currentItemId] = Math.round(pct);
+    ls_set(CONTINUE_KEY, progressStore);
+  }
+});
+document.getElementById('scrubTrack').addEventListener('click', (e) => {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  if (videoEl.duration) videoEl.currentTime = pct * videoEl.duration;
+});
+
+/* keyboard shortcuts while the player is open */
+document.addEventListener('keydown', (e) => {
+  if (!screens.player.classList.contains('active')) return;
+  if (['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  switch(e.key){
+    case ' ': e.preventDefault(); videoEl.paused ? videoEl.play() : videoEl.pause(); break;
+    case 'ArrowLeft': videoEl.currentTime = Math.max(0, videoEl.currentTime - 10); break;
+    case 'ArrowRight': videoEl.currentTime = Math.min(videoEl.duration||0, videoEl.currentTime + 10); break;
+    case 'm': case 'M': videoEl.muted = !videoEl.muted; setMuteIcon(videoEl.muted); break;
+    case 'f': case 'F': document.getElementById('fsBtn').click(); break;
+    case 'Escape': goBackToBrowse(); break;
+  }
+});
+
+/* ---------- end card + confetti ---------- */
+const endCard = document.getElementById('endCard');
+videoEl.addEventListener('ended', () => {
+  endCard.classList.add('show');
+  setPlayIcon(false);
+  if (currentItemId){ progressStore[currentItemId] = 100; ls_set(CONTINUE_KEY, progressStore); renderContinueRow(); }
+  runConfetti();
+});
+document.getElementById('replayBtn').addEventListener('click', () => {
+  endCard.classList.remove('show');
+  videoEl.currentTime = 0;
+  videoEl.play();
+});
+
+function runConfetti(){
+  const canvas = document.getElementById('confettiCanvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * dpr;
+  canvas.height = canvas.clientHeight * dpr;
+  ctx.scale(dpr, dpr);
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  const colors = ['#e50914','#ff6b81','#ffd166','#f5f5f1','#ff477e'];
+  const pieces = Array.from({length:70}, () => ({
+    x: Math.random()*W, y: -20 - Math.random()*H*0.5,
+    r: 4 + Math.random()*5, c: colors[Math.floor(Math.random()*colors.length)],
+    vy: 2 + Math.random()*3, vx: -1.5 + Math.random()*3,
+    rot: Math.random()*360, vr: -6 + Math.random()*12,
+    heart: Math.random() < 0.35
+  }));
+  let frame = 0;
+  function draw(){
+    frame++;
+    ctx.clearRect(0,0,W,H);
+    pieces.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot * Math.PI/180);
+      ctx.fillStyle = p.c;
+      if (p.heart){
+        ctx.font = `${p.r*3}px sans-serif`;
+        ctx.fillText('♥', -p.r, p.r);
+      } else {
+        ctx.fillRect(-p.r/2, -p.r/2, p.r, p.r*1.6);
+      }
+      ctx.restore();
+    });
+    if (frame < 260 && endCard.classList.contains('show')) requestAnimationFrame(draw);
+    else ctx.clearRect(0,0,W,H);
+  }
+  draw();
+}
+</script>
+</body>
+</html>
